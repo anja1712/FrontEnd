@@ -394,6 +394,465 @@ createApp({
             } catch (error) {
                 console.error('Error loading user data:', error);
             }
+        },
+        
+        async loadWallets() {
+            try {
+                console.log('Loading wallets for user:', this.currentUser.id);
+                const response = await this.apiCall(`/wallets/${this.currentUser.id}/all`, 'GET');
+                this.wallets = response.data || [];
+                this.totalWallets = this.wallets.length;
+                console.log('Wallets loaded:', this.wallets);
+            } catch (error) {
+                console.error('Error loading wallets:', error);
+                this.wallets = [];
+                this.totalWallets = 0;
+            }
+        },
+        
+        async loadTransactions() {
+            try {
+                // Load transactions for all wallets
+                const walletTransactions = await Promise.all(
+                    this.wallets.map(wallet => 
+                        this.apiCall(`/wallets/${wallet.id}/transactions`, 'GET')
+                    )
+                );
+                
+                this.allTransactions = walletTransactions
+                    .flatMap(response => response.data || [])
+                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                this.recentTransactions = this.allTransactions.slice(0, 5);
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+            }
+        },
+        
+        async loadCategories() {
+            try {
+                const response = await this.apiCall('/users/categories?onlyMy=true', 'GET');
+                this.categories = response.data || [];
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        },
+        
+        async loadLastTransactions() {
+            try {
+                console.log('Loading last 10 transactions for user:', this.currentUser.id);
+                const response = await this.apiCall(`/transactions/users/${this.currentUser.id}/last`, 'GET');
+                this.lastTransactions = response.data || [];
+                console.log('Last transactions loaded:', this.lastTransactions);
+            } catch (error) {
+                console.error('Error loading last transactions:', error);
+            }
+        },
+        
+        async loadGoals() {
+            try {
+                console.log('Loading goals for user:', this.currentUser.id);
+                const response = await this.apiCall(`/goals/${this.currentUser.id}/all`, 'GET');
+                this.goals = response.data || [];
+                console.log('Goals loaded:', this.goals);
+            } catch (error) {
+                console.error('Error loading goals:', error);
+                this.goals = [];
+            }
+        },
+        
+        async loadTransactionStatistics() {
+            // Toggle: if already showing, hide it
+            if (this.transactionStatistics) {
+                this.transactionStatistics = null;
+                return;
+            }
+            
+            try {
+                // Set default date range to last 30 days if not specified
+                const endDate = this.statisticsRequest.endDate || new Date().toISOString();
+                const startDate = this.statisticsRequest.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                
+                const requestData = {
+                    userId: this.currentUser.id,
+                    startDate: startDate,
+                    endDate: endDate,
+                    currency: this.statisticsRequest.currency
+                };
+                
+                const response = await this.apiCall('/transactions/statistics', 'POST', requestData);
+                this.transactionStatistics = response.data;
+                this.showSuccessMessage(`Statistics loaded in ${this.statisticsRequest.currency}`);
+            } catch (error) {
+                console.error('Error loading transaction statistics:', error);
+                this.transactionStatistics = null;
+                this.showErrorMessage('Failed to load statistics');
+            }
+        },
+        
+        // Wallet Methods
+        async createWallet() {
+            try {
+                const walletData = {
+                    name: this.newWallet.name,
+                    initialAmount: parseFloat(this.newWallet.initialAmount),
+                    currency: this.newWallet.currency,
+                    savings: this.newWallet.savings,
+                    userId: this.currentUser.id
+                };
+                
+                const response = await this.apiCall('/wallets/create', 'POST', walletData);
+                this.wallets.push(response.data);
+                this.showCreateWallet = false;
+                this.resetNewWallet();
+                this.calculateStats();
+                this.showSuccessMessage('Wallet created successfully!');
+            } catch (error) {
+                this.showErrorMessage('Failed to create wallet');
+            }
+        },
+        
+        async editWallet(wallet) {
+            this.editWalletForm = {
+                id: wallet.id,
+                name: wallet.name,
+                currentAmount: wallet.balance || wallet.currentAmount || 0,
+                currency: wallet.currency,
+                savings: wallet.savings
+            };
+            this.showEditWallet = true;
+        },
+        
+        async updateWallet() {
+            try {
+                const walletData = {
+                    name: this.editWalletForm.name,
+                    currentAmount: parseFloat(this.editWalletForm.currentAmount),
+                    currency: this.editWalletForm.currency,
+                    savings: this.editWalletForm.savings
+                };
+                
+                const response = await this.apiCall(`/wallets/${this.editWalletForm.id}/update`, 'PUT', walletData);
+                
+                // Update wallet in the list
+                const index = this.wallets.findIndex(w => w.id === this.editWalletForm.id);
+                if (index !== -1) {
+                    this.wallets[index] = response.data;
+                }
+                
+                this.showEditWallet = false;
+                this.calculateStats();
+                this.showSuccessMessage('Wallet updated successfully!');
+            } catch (error) {
+                this.showErrorMessage('Failed to update wallet');
+            }
+        },
+        
+        async archiveWallet(wallet) {
+            try {
+                const endpoint = wallet.archived ? 'unarchive' : 'archive';
+                const response = await this.apiCall(`/wallets/${wallet.id}/${endpoint}`, 'PUT');
+                
+                // Update wallet in the list
+                const index = this.wallets.findIndex(w => w.id === wallet.id);
+                if (index !== -1) {
+                    this.wallets[index] = response.data;
+                }
+                
+                this.showSuccessMessage(wallet.archived ? 'Wallet unarchived!' : 'Wallet archived!');
+            } catch (error) {
+                this.showErrorMessage('Failed to archive wallet');
+            }
+        },
+        
+        async deleteWallet(wallet) {
+            this.confirmModalTitle = 'Delete Wallet';
+            this.confirmModalMessage = `Are you sure you want to delete "${wallet.name}"? This action cannot be undone.`;
+            this.confirmModalAction = async () => {
+                try {
+                    await this.apiCall(`/wallets/${wallet.id}`, 'DELETE');
+                    this.wallets = this.wallets.filter(w => w.id !== wallet.id);
+                    this.calculateStats();
+                    this.showSuccessMessage('Wallet deleted successfully!');
+                } catch (error) {
+                    this.showErrorMessage('Failed to delete wallet');
+                }
+            };
+            this.showConfirmModal = true;
+        },
+        
+        async confirmAction() {
+            if (this.confirmModalAction) {
+                await this.confirmModalAction();
+            }
+            this.showConfirmModal = false;
+            this.confirmModalAction = null;
+        },
+        
+        cancelConfirmModal() {
+            this.showConfirmModal = false;
+            this.confirmModalAction = null;
+        },
+        
+        async selectWallet(wallet) {
+            this.selectedWallet = wallet;
+            console.log('Selected wallet:', wallet);
+            
+            try {
+                // Load transactions for this wallet
+                const response = await this.apiCall(`/wallets/${wallet.id}/transactions`, 'GET');
+                // Sort by date (newest first)
+                this.walletTransactions = (response.data || []).sort((a, b) => 
+                    new Date(b.date || b.transactionDate) - new Date(a.date || a.transactionDate)
+                );
+                console.log('Wallet transactions loaded:', this.walletTransactions);
+                
+                // Show wallet transactions view
+                this.currentView = 'wallet-detail';
+            } catch (error) {
+                console.error('Error loading wallet transactions:', error);
+                alert('Failed to load wallet transactions');
+            }
+        },
+        
+        // Transaction Methods (moved to line ~1081 with proper currency handling)
+        
+        async transferFunds(sourceWalletId, destinationWalletId, amount) {
+            try {
+                const transferData = {
+                    sourceWalletId: sourceWalletId,
+                    destinationWalletId: destinationWalletId,
+                    amount: parseFloat(amount)
+                };
+                
+                await this.apiCall('/transactions/transfer', 'POST', transferData);
+                await this.loadWallets();
+                this.calculateStats();
+            } catch (error) {
+                this.errorMessage = error.response?.data || 'Transfer failed';
+            }
+        },
+        
+        // Goal Methods
+        async createGoal() {
+            try {
+                const goalData = {
+                    name: this.newGoal.name,
+                    walletId: this.newGoal.walletId,
+                    currentAmount: this.newGoal.currentAmount ? parseFloat(this.newGoal.currentAmount) : 0,
+                    goalAmount: parseFloat(this.newGoal.goalAmount),
+                    targetDate: new Date(this.newGoal.targetDate).toISOString()
+                };
+                
+                const response = await this.apiCall('/goals/create', 'POST', goalData);
+                this.goals.push(response.data);
+                this.showCreateGoal = false;
+                this.resetNewGoal();
+                this.showSuccessMessage('Goal created successfully!');
+            } catch (error) {
+                this.showErrorMessage('Failed to create goal');
+            }
+        },
+        
+        editGoal(goal) {
+            this.editGoalForm = {
+                id: goal.id,
+                name: goal.name,
+                walletId: goal.walletId,
+                currentAmount: goal.currentAmount || 0,
+                goalAmount: goal.goalAmount,
+                targetDate: goal.targetDate ? new Date(goal.targetDate).toISOString().split('T')[0] : ''
+            };
+            this.showEditGoal = true;
+        },
+        
+        async updateGoal() {
+            try {
+                const goalData = {
+                    name: this.editGoalForm.name,
+                    walletId: this.editGoalForm.walletId,
+                    currentAmount: this.editGoalForm.currentAmount ? parseFloat(this.editGoalForm.currentAmount) : 0,
+                    goalAmount: parseFloat(this.editGoalForm.goalAmount),
+                    targetDate: new Date(this.editGoalForm.targetDate).toISOString()
+                };
+                
+                const response = await this.apiCall(`/goals/${this.editGoalForm.id}/update`, 'PUT', goalData);
+                
+                // Update goal in the list
+                const index = this.goals.findIndex(g => g.id === this.editGoalForm.id);
+                if (index !== -1) {
+                    this.goals[index] = response.data;
+                }
+                
+                this.showEditGoal = false;
+                this.showSuccessMessage('Goal updated successfully!');
+            } catch (error) {
+                this.showErrorMessage('Failed to update goal');
+            }
+        },
+        
+        async deleteGoal(goalId) {
+            const goal = this.goals.find(g => g.id === goalId);
+            const goalName = goal ? goal.name : 'this goal';
+            
+            this.confirmModalTitle = 'Delete Goal';
+            this.confirmModalMessage = `Are you sure you want to delete "${goalName}"? This action cannot be undone.`;
+            this.confirmModalAction = async () => {
+                try {
+                    await this.apiCall(`/goals/${goalId}`, 'DELETE');
+                    this.goals = this.goals.filter(g => g.id !== goalId);
+                    this.showSuccessMessage('Goal deleted successfully!');
+                } catch (error) {
+                    this.showErrorMessage('Failed to delete goal');
+                }
+            };
+            this.showConfirmModal = true;
+        },
+        
+        // Admin Methods
+        async loadAdminDashboard() {
+            console.log('Loading admin dashboard...');
+            console.log('Current user:', this.currentUser);
+            console.log('Is authenticated:', this.isAuthenticated);
+            
+            try {
+                const response = await this.apiCall('/admin/dashboard', 'GET');
+                this.adminDashboard = response.data;
+                this.showSuccessMessage('Dashboard loaded successfully');
+            } catch (error) {
+                console.error('Admin dashboard error:', error);
+                this.showErrorMessage('Failed to load dashboard: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async getUserById() {
+            if (!this.adminUserSearch) {
+                this.showErrorMessage('Please enter a user ID');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall(`/users/${this.adminUserSearch}`, 'GET');
+                this.selectedUser = response.data;
+                this.selectedUserId = response.data.id;
+                this.selectedUserStatus = response.data.blocked ? 'BLOCKED' : 'ACTIVE';
+                this.showSuccessMessage('User loaded successfully');
+            } catch (error) {
+                this.showErrorMessage('Failed to load user: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async changeUserStatus() {
+            if (!this.selectedUserId) {
+                this.showErrorMessage('Please select a user first');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall(`/admin/users/${this.selectedUserId}/status?status=${this.selectedUserStatus}`, 'PUT');
+                this.showSuccessMessage(response.data);
+                // Refresh user data
+                await this.getUserById();
+            } catch (error) {
+                this.showErrorMessage('Failed to change user status: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async addAdminNote() {
+            if (!this.selectedUserId || !this.adminNote.trim()) {
+                this.showErrorMessage('Please select a user and enter a note');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall(`/admin/users/${this.selectedUserId}/note?note=${encodeURIComponent(this.adminNote)}`, 'PUT');
+                this.showSuccessMessage(response.data);
+                this.adminNote = '';
+                // Refresh user data
+                await this.getUserById();
+            } catch (error) {
+                this.showErrorMessage('Failed to add admin note: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async deleteAdminNote() {
+            if (!this.selectedUserId) {
+                this.showErrorMessage('Please select a user first');
+                return;
+            }
+            
+            this.confirmModalTitle = 'Delete Admin Note';
+            this.confirmModalMessage = 'Are you sure you want to delete this admin note? This action cannot be undone.';
+            this.confirmModalAction = async () => {
+                try {
+                    const response = await this.apiCall(`/admin/users/${this.selectedUserId}/note`, 'DELETE');
+                    this.showSuccessMessage('Admin note deleted successfully!');
+                    // Refresh user data
+                    await this.getUserById();
+                } catch (error) {
+                    this.showErrorMessage('Failed to delete admin note: ' + (error.response?.data || error.message));
+                }
+            };
+            this.showConfirmModal = true;
+        },
+        
+        async getUserTransactions() {
+            if (!this.selectedUserId) {
+                this.showErrorMessage('Please select a user first');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall(`/admin/users/${this.selectedUserId}/transactions`, 'GET');
+                this.monitoredTransactions = response.data;
+                this.showSuccessMessage('User transactions loaded successfully');
+            } catch (error) {
+                this.showErrorMessage('Failed to load user transactions: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async loadAdminCategories() {
+            try {
+                const response = await this.apiCall('/admin/categories', 'GET');
+                this.adminCategories = response.data;
+                this.showSuccessMessage('Categories loaded successfully');
+            } catch (error) {
+                this.showErrorMessage('Failed to load categories: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async createCategory() {
+            if (!this.newCategory.name.trim()) {
+                this.showErrorMessage('Please enter a category name');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall('/admin/categories', 'POST', this.newCategory);
+                this.adminCategories.push(response.data);
+                this.newCategory = { name: '', transactionType: 'EXPENSE' };
+                this.showSuccessMessage('Category created successfully');
+            } catch (error) {
+                this.showErrorMessage('Failed to create category: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async deleteCategory(categoryId) {
+            const category = this.adminCategories.find(c => c.id === categoryId);
+            const categoryName = category ? category.name : 'this category';
+            
+            this.confirmModalTitle = 'Delete Category';
+            this.confirmModalMessage = `Are you sure you want to delete "${categoryName}"? This action cannot be undone.`;
+            this.confirmModalAction = async () => {
+                try {
+                    await this.apiCall(`/admin/categories/${categoryId}`, 'DELETE');
+                    this.adminCategories = this.adminCategories.filter(c => c.id !== categoryId);
+                    this.showSuccessMessage('Category deleted successfully!');
+                } catch (error) {
+                    this.showErrorMessage('Failed to delete category');
+                }
+            };
+            this.showConfirmModal = true;
         }
     }
 }).mount('#app');
