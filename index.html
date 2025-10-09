@@ -813,6 +813,172 @@
                 </form>
             </div>
         </div>
+
+        <!-- Transfer Modal -->
+        <div v-if="showTransferModal" class="modal-overlay" @click="showTransferModal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Transfer Funds</h3>
+                    <button @click="showTransferModal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="transferFunds" class="modal-form">
+                    <div class="form-group">
+                        <label>From Wallet</label>
+                        <select v-model="transferForm.sourceWalletId" required>
+                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>To Wallet</label>
+                        <select v-model="transferForm.destinationWalletId" required>
+                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id" :disabled="wallet.id === transferForm.sourceWalletId">
+                                {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" v-model="transferForm.amount" step="0.01" required>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showTransferModal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Transfer Funds</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Wallet Modal -->
+        <div v-if="showEditWallet" class="modal-overlay" @click="showEditWallet = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Edit Wallet</h3>
+                    <button @click="showEditWallet = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="updateWallet" class="modal-form">
+                    <div class="form-group">
+                        <label>Wallet Name</label>
+                        <input type="text" v-model="editWalletForm.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Amount</label>
+                        <input type="number" v-model="editWalletForm.currentAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select v-model="editWalletForm.currency" required>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="RSD">RSD</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <span>Savings</span>
+                            <input type="checkbox" v-model="editWalletForm.savings" style="width: 20px; height: 20px; cursor: pointer;">
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showEditWallet = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Update Wallet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Create Goal Modal -->
+        <div v-if="showCreateGoal" class="modal-overlay" @click="showCreateGoal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Create New Goal</h3>
+                    <button @click="showCreateGoal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="createGoal" class="modal-form">
+                    <div class="form-group">
+                        <label>Goal Name</label>
+                        <input type="text" v-model="newGoal.name" placeholder="e.g., Vacation Fund" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Starting Amount (Optional)</label>
+                        <input type="number" v-model="newGoal.currentAmount" step="0.01" placeholder="0.00" min="0">
+                        <small class="form-help">Leave at 0 to start fresh, or set an initial amount</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Amount</label>
+                        <input type="number" v-model="newGoal.goalAmount" step="0.01" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Date</label>
+                        <input type="date" v-model="newGoal.targetDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Savings Wallet</label>
+                        <select v-model="newGoal.walletId" required>
+                            <option value="">Select a savings wallet</option>
+                            <option v-for="wallet in savingsWallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ wallet.currency }})
+                            </option>
+                        </select>
+                        <small class="form-help">Only savings wallets can be used for goals</small>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showCreateGoal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Create Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Goal Modal -->
+        <div v-if="showEditGoal" class="modal-overlay" @click="showEditGoal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Edit Goal</h3>
+                    <button @click="showEditGoal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="updateGoal" class="modal-form">
+                    <div class="form-group">
+                        <label>Goal Name</label>
+                        <input type="text" v-model="editGoalForm.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Amount</label>
+                        <input type="number" v-model="editGoalForm.currentAmount" step="0.01" min="0" required>
+                        <small class="form-help">Manually adjust the current progress</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Amount</label>
+                        <input type="number" v-model="editGoalForm.goalAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Date</label>
+                        <input type="date" v-model="editGoalForm.targetDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Savings Wallet</label>
+                        <select v-model="editGoalForm.walletId" required>
+                            <option v-for="wallet in savingsWallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ wallet.currency }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showEditGoal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Update Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
