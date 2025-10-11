@@ -853,6 +853,294 @@ createApp({
                 }
             };
             this.showConfirmModal = true;
+        },
+        
+        async loadCurrencies() {
+            try {
+                const response = await this.apiCall('/admin/currencies/all', 'GET');
+                this.currencies = response.data;
+                console.log('Currencies loaded:', this.currencies);
+            } catch (error) {
+                console.error('Failed to load currencies:', error);
+                // Fallback to empty array if loading fails
+                this.currencies = [];
+            }
+        },
+        
+        async createCurrency() {
+            if (!this.newCurrency.name.trim() || !this.newCurrency.exchangeRateToDollar) {
+                this.showErrorMessage('Please enter both currency name and exchange rate');
+                return;
+            }
+            
+            try {
+                const response = await this.apiCall('/admin/currencies', 'POST', this.newCurrency);
+                this.currencies.push(response.data);
+                this.newCurrency = { name: '', exchangeRateToDollar: null };
+                this.showSuccessMessage('Currency created successfully');
+            } catch (error) {
+                this.showErrorMessage('Failed to create currency: ' + (error.response?.data || error.message));
+            }
+        },
+        
+        async deleteCurrency(currencyId) {
+            const currency = this.currencies.find(c => c.id === currencyId);
+            const currencyName = currency ? currency.name : 'this currency';
+            
+            this.confirmModalTitle = 'Delete Currency';
+            this.confirmModalMessage = `Are you sure you want to delete "${currencyName}"? This action cannot be undone.`;
+            this.confirmModalAction = async () => {
+                try {
+                    await this.apiCall(`/admin/currencies/${currencyId}/delete`, 'DELETE');
+                    this.currencies = this.currencies.filter(c => c.id !== currencyId);
+                    this.showSuccessMessage('Currency deleted successfully!');
+                } catch (error) {
+                    this.showErrorMessage('Failed to delete currency');
+                }
+            };
+            this.showConfirmModal = true;
+        },
+        
+        async monitorTransactions() {
+            console.log('Monitor button clicked');
+            console.log('Monitoring request data:', this.monitoringRequest);
+            
+            // Build the request with only non-null/non-empty values
+            const request = {};
+            
+            if (this.monitoringRequest.userId) request.userId = this.monitoringRequest.userId;
+            if (this.monitoringRequest.category && this.monitoringRequest.category.trim()) {
+                request.category = this.monitoringRequest.category.trim();
+            }
+            if (this.monitoringRequest.amount) {
+                request.amount = this.monitoringRequest.amount;
+                request.amountGreaterOrEqual = this.monitoringRequest.amountGreaterOrEqual;
+            }
+            if (this.monitoringRequest.date) {
+                // Convert datetime-local to ISO string
+                request.date = new Date(this.monitoringRequest.date).toISOString();
+                request.dateAfterOrEqual = this.monitoringRequest.dateAfterOrEqual;
+            }
+            request.sortByDate = this.monitoringRequest.sortByDate;
+            request.sortByAmount = this.monitoringRequest.sortByAmount;
+            
+            console.log('Sending request:', request);
+            
+            try {
+                // Use POST instead of GET since GET with body is problematic
+                const response = await this.apiCall('/admin/monitor', 'POST', request);
+                console.log('Monitor response:', response);
+                this.monitoredTransactions = response.data || [];
+                console.log('Monitored transactions count:', this.monitoredTransactions.length);
+                this.showSuccessMessage(`Found ${this.monitoredTransactions.length} transactions`);
+            } catch (error) {
+                console.error('Monitor error:', error);
+                console.error('Error response:', error.response);
+                this.showErrorMessage('Failed to monitor transactions: ' + (error.response?.data || error.message));
+                this.monitoredTransactions = [];
+            }
+        },
+        
+        showSuccessMessage(message) {
+            this.showToastNotification(message, 'success');
+        },
+        
+        showErrorMessage(message) {
+            this.showToastNotification(message, 'error');
+        },
+        
+        showToastNotification(message, type = 'success') {
+            this.toastMessage = message;
+            this.toastType = type;
+            this.showToast = true;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                this.showToast = false;
+            }, 3000);
+        },
+        
+        // Statistics Methods
+        calculateStats() {
+            console.log('Calculating stats...');
+            console.log('Wallets:', this.wallets);
+            console.log('Transactions:', this.allTransactions);
+            
+            this.totalWallets = this.wallets.length;
+            this.totalBalance = this.wallets.reduce((sum, wallet) => {
+                const balance = parseFloat(wallet.balance || wallet.currentAmount || 0);
+                console.log(`Wallet ${wallet.name} balance:`, balance);
+                return sum + balance;
+            }, 0);
+            
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            
+            const monthlyTransactions = this.allTransactions.filter(transaction => {
+                const transactionDate = new Date(transaction.date);
+                return transactionDate.getMonth() === currentMonth && 
+                       transactionDate.getFullYear() === currentYear;
+            });
+            
+            this.monthlyIncome = monthlyTransactions
+                .filter(t => t.type === 'INCOME')
+                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+            
+            this.monthlyExpenses = monthlyTransactions
+                .filter(t => t.type === 'EXPENSE')
+                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+            
+            console.log('Stats calculated:', {
+                totalWallets: this.totalWallets,
+                totalBalance: this.totalBalance,
+                monthlyIncome: this.monthlyIncome,
+                monthlyExpenses: this.monthlyExpenses
+            });
+        },
+        
+        resetStats() {
+            this.totalWallets = 0;
+            this.totalBalance = 0;
+            this.monthlyIncome = 0;
+            this.monthlyExpenses = 0;
+        },
+        
+        // Utility Methods
+        async apiCall(endpoint, method = 'GET', data = null) {
+            const url = `${this.apiBaseUrl}${endpoint}`;
+            const config = {
+                method,
+                url,
+                headers: {}
+            };
+            
+            // Add JWT token to Authorization header if available
+            if (this.authToken) {
+                config.headers['Authorization'] = `Bearer ${this.authToken}`;
+                console.log('Authorization header set:', config.headers['Authorization']);
+            } else {
+                console.log('No auth token available for this request');
+            }
+            
+            if (data) {
+                if (data instanceof FormData) {
+                    config.data = data;
+                    // Don't set Content-Type for FormData, let browser set it with boundary
+                    delete config.headers['Content-Type'];
+                } else {
+                    config.data = data;
+                    config.headers['Content-Type'] = 'application/json';
+                }
+            }
+            
+            // Debug logging
+            console.log(`API Call: ${method} ${url}`);
+            console.log('Auth token:', this.authToken ? 'Present' : 'Missing');
+            if (this.authToken) {
+                console.log('Token preview:', this.authToken.substring(0, 20) + '...');
+            }
+            console.log('Config:', config);
+            console.log('Config.data:', JSON.stringify(config.data, null, 2));
+            
+            try {
+                const response = await axios(config);
+                console.log(`API Response:`, response.data);
+                return response;
+            } catch (error) {
+                console.error('API Error:', error);
+                console.error('Error details:', {
+                    status: error.response?.status,
+                    statusText: error.response?.statusText,
+                    data: error.response?.data,
+                    url: error.config?.url,
+                    method: error.config?.method
+                });
+                
+                // If we get 401, the token might be invalid
+                if (error.response?.status === 401) {
+                    console.log('Token might be invalid, clearing auth');
+                    this.clearAuth();
+                }
+                
+                throw error;
+            }
+        },
+        
+        formatCurrency(amount, currency = 'USD') {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: currency,
+                minimumFractionDigits: 2
+            }).format(amount);
+        },
+        
+        getWalletCurrency(walletId) {
+            const wallet = this.wallets.find(w => w.id === walletId);
+            return wallet ? wallet.currency : 'USD';
+        },
+        
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        },
+        
+        getTransactionIcon(type) {
+            if (type === 'INCOME') return 'fas fa-arrow-up';
+            if (type === 'TRANSFER') return 'fas fa-arrow-right';
+            return 'fas fa-arrow-down'; // EXPENSE
+        },
+        
+        getGoalProgress(goal) {
+            if (!goal || !goal.percentReached) return 0;
+            // Backend already calculates percentage, just return it
+            return Math.min(parseFloat(goal.percentReached), 100);
+        },
+        
+        resetNewWallet() {
+            this.newWallet = {
+                name: '',
+                initialAmount: 0,
+                currency: 'USD',
+                savings: false
+            };
+        },
+        
+        resetNewTransaction() {
+            this.newTransaction = {
+                name: '',
+                amount: 0,
+                type: 'EXPENSE',
+                walletId: null,
+                category: ''
+            };
+        },
+        
+        resetNewGoal() {
+            this.newGoal = {
+                name: '',
+                walletId: null,
+                currentAmount: 0,
+                goalAmount: 0,
+                targetDate: ''
+            };
+        },
+        
+        resetNewTransaction() {
+            this.newTransaction = {
+                name: '',
+                amount: 0,
+                type: 'EXPENSE',
+                walletId: null,
+                category: '',
+                currency: 'USD',
+                recurring: false,
+                frequency: null,
+                goal: null
+            };
         }
     }
 }).mount('#app');

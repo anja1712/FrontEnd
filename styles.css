@@ -981,3 +981,519 @@ body {
     font-size: 1.3rem;
     font-weight: 500;
 }
+
+/* Wallets */
+.wallets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.wallet-card {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.wallet-card:hover {
+    transform: translateY(-5px);
+    border-color: #4caf50;
+    box-shadow: 0 10px 25px rgba(76, 175, 80, 0.15);
+}
+
+.wallet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.wallet-header h4 {
+    color: #333;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.wallet-currency {
+    background: #e8f5e8;
+    color: #4caf50;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.wallet-balance {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.currency-code {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.balance-amount {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.wallet-footer {
+    display: flex;
+    gap: 10px;
+}
+
+.savings-badge, .archived-badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.savings-badge {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.archived-badge {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
+.wallet-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.action-btn {
+    background: #f5f5f5;
+    border: none;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #666;
+}
+
+.action-btn:hover {
+    background: #4caf50;
+    color: white;
+}
+
+.action-btn.delete-btn:hover {
+    background: #f44336;
+    color: white;
+}
+
+/* Goals */
+.goals-list {
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.goal-item {
+    padding: 20px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.3s ease;
+}
+
+.goal-item:hover {
+    background: #f8f9fa;
+}
+
+.goal-item:last-child {
+    border-bottom: none;
+}
+
+.goal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.goal-header h4 {
+    color: #333;
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin: 0;
+}
+
+.goal-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.goal-progress {
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50, #66bb6a);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.goal-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.goal-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.goal-amount {
+    font-size: 0.9rem;
+    color: #4caf50;
+    font-weight: 500;
+}
+
+.goal-date {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.goal-percentage {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #4caf50;
+}
+
+.no-goals {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.no-goals i {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    opacity: 0.5;
+    color: #4caf50;
+}
+
+.no-goals p {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.form-help {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 5px;
+    display: block;
+}
+
+/* Transactions */
+.transactions-list {
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.transactions-list .transaction-item {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.3s ease;
+    justify-content: flex-start;
+    gap: 15px;
+}
+
+.transactions-list .transaction-item:hover {
+    background: #f8f9fa;
+}
+
+.transactions-list .transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transactions-list .transaction-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.transactions-list .transaction-icon i {
+    color: inherit;
+}
+
+.transactions-list .transaction-icon i.fa-arrow-up {
+    color: #4caf50;
+}
+
+.transactions-list .transaction-icon i.fa-arrow-down {
+    color: #f44336;
+}
+
+.transactions-list .transaction-icon i.fa-arrow-right {
+    color: #2196f3;
+}
+
+.transactions-list .transaction-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.transactions-list .transaction-details h4 {
+    color: #333;
+    font-size: 1rem;
+    margin: 0 0 5px 0;
+    font-weight: 600;
+}
+
+.transactions-list .transaction-details p {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.transactions-list .transaction-amount {
+    font-size: 1.2rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.transactions-list .transaction-amount.income {
+    color: #4caf50;
+}
+
+.transactions-list .transaction-amount.expense {
+    color: #f44336;
+}
+
+/* Transaction Filter Section */
+.transaction-filter-section {
+    margin-bottom: 20px;
+}
+
+/* Recurring Transaction Items */
+.transactions-list .transaction-item.recurring {
+    background: linear-gradient(to right, rgba(76, 175, 80, 0.03), transparent);
+    border-left: 3px solid #c8e6c9;
+}
+
+.transactions-list .transaction-item.recurring:hover {
+    background: linear-gradient(to right, rgba(76, 175, 80, 0.06), transparent);
+}
+
+.recurring-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: #e8f5e9;
+    color: #4caf50;
+    border: 1px solid #c8e6c9;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.recurring-badge i {
+    font-size: 0.65rem;
+}
+
+.disable-recurring-btn {
+    background: transparent;
+    border: 1px solid #e0e0e0;
+    color: #999;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+
+.disable-recurring-btn:hover {
+    background: #fff3e0;
+    border-color: #ff9800;
+    color: #ff9800;
+}
+
+.disable-recurring-btn i {
+    font-size: 0.85rem;
+}
+
+.no-transactions {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+}
+
+.no-transactions i {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
+
+.no-transactions p {
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* View Headers */
+.view-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+    justify-content: space-between;
+}
+
+.wallet-switcher {
+    display: flex;
+    gap: 0;
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+.switcher-btn {
+    padding: 8px 20px;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 0.95rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.switcher-btn:hover {
+    color: #333;
+}
+
+.switcher-btn.active {
+    background: white;
+    color: #4caf50;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.statistics-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.currency-select {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #4caf50;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 14px;
+    padding-right: 40px;
+}
+
+.currency-select:hover {
+    background: #45a049;
+}
+
+.currency-select:focus {
+    background: #45a049;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+}
+
+.wallet-balance-display {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    margin-right: 20px;
+}
+
+.wallet-detail-balance {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.wallet-detail-balance .currency-code {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #666;
+}
+
+.wallet-detail-balance .balance-amount {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #2e7d32;
+}
+
+.back-btn {
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #666;
+}
+
+.back-btn:hover {
+    background: #4caf50;
+    color: white;
+    border-color: #4caf50;
+}
