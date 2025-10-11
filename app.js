@@ -1141,6 +1141,196 @@ createApp({
                 frequency: null,
                 goal: null
             };
+        },
+        
+        // Navigation Methods
+        navigateTo(view) {
+            this.currentView = view;
+            localStorage.setItem('currentView', view);
+        },
+        
+        toggleAdminPanel() {
+            console.log('Admin button clicked!');
+            this.currentView = this.currentView === 'admin' ? 'wallets' : 'admin';
+        },
+        
+        toggleProfilePanel() {
+            if (!this.isAuthenticated || !this.currentUser) {
+                console.log('User not authenticated or no current user');
+                return;
+            }
+            
+            // Populate form with current user data
+            this.profileForm = {
+                firstName: this.currentUser.firstName || '',
+                lastName: this.currentUser.lastName || '',
+                userName: this.currentUser.userName || '',
+                email: this.currentUser.email || '',
+                birthDate: this.currentUser.birthDate || ''
+            };
+            
+            this.showProfilePanel = !this.showProfilePanel;
+        },
+        
+        async updateProfile() {
+            this.profileLoading = true;
+            try {
+                const response = await this.apiCall(`/users/${this.currentUser.id}/update`, 'PUT', this.profileForm);
+                
+                // Update current user data
+                this.currentUser = { ...this.currentUser, ...response.data };
+                
+                // Close profile panel
+                this.showProfilePanel = false;
+                
+                this.showSuccessMessage('Profile updated successfully!');
+            } catch (error) {
+                console.error('Error updating profile:', error);
+                this.showErrorMessage('Failed to update profile');
+            } finally {
+                this.profileLoading = false;
+            }
+        },
+        
+        async disableRecurring(transactionId) {
+            try {
+                await this.apiCall(`/transactions/${transactionId}/disableRecurring`, 'PUT');
+                
+                // Update the transaction in lastTransactions
+                const transaction = this.lastTransactions.find(t => t.id === transactionId);
+                if (transaction) {
+                    transaction.recurring = false;
+                    transaction.frequency = null;
+                }
+                
+                // Also update in allTransactions if it exists there
+                const allTransaction = this.allTransactions.find(t => t.id === transactionId);
+                if (allTransaction) {
+                    allTransaction.recurring = false;
+                    allTransaction.frequency = null;
+                }
+                
+                this.showSuccessMessage('Recurring disabled successfully!');
+            } catch (error) {
+                console.error('Error disabling recurring:', error);
+                this.showErrorMessage('Failed to disable recurring');
+            }
+        },
+        
+        async transferFunds() {
+            try {
+                const transferData = {
+                    sourceWalletId: this.transferForm.sourceWalletId,
+                    destinationWalletId: this.transferForm.destinationWalletId,
+                    amount: this.transferForm.amount
+                };
+                
+                console.log('Transferring funds:', transferData);
+                const response = await this.apiCall('/transactions/transfer', 'POST', transferData);
+                console.log('Transfer successful:', response.data);
+                
+                // Close transfer modal
+                this.showTransferModal = false;
+                
+                // Reset form
+                this.transferForm = {
+                    sourceWalletId: null,
+                    destinationWalletId: null,
+                    amount: 0
+                };
+                
+                // Show success message
+                this.showSuccessMessage('Transfer completed successfully!');
+                
+                // Reload wallets and transactions in background
+                Promise.all([
+                    this.loadWallets(),
+                    this.selectedWallet ? this.selectWallet(this.selectedWallet) : Promise.resolve()
+                ]).catch(err => console.error('Error reloading data:', err));
+                
+            } catch (error) {
+                console.error('Error transferring funds:', error);
+                this.showErrorMessage('Failed to transfer funds. Please try again.');
+            }
+        },
+        
+        async createTransaction() {
+            try {
+                // Find the selected wallet
+                const selectedWallet = this.wallets.find(w => w.id === this.newTransaction.walletId);
+                
+                if (!selectedWallet) {
+                    this.showErrorMessage('Please select a wallet');
+                    return;
+                }
+                
+                const transactionData = {
+                    name: this.newTransaction.name,
+                    currency: this.newTransaction.currency,
+                    amount: parseFloat(this.newTransaction.amount),
+                    category: this.newTransaction.category,
+                    type: this.newTransaction.type,
+                    transactionDate: new Date().toISOString(),
+                    walletId: this.newTransaction.walletId,
+                    recurring: this.newTransaction.recurring,
+                    frequency: this.newTransaction.recurring ? this.newTransaction.frequency : null,
+                    goal: this.newTransaction.goal || null
+                };
+                
+                await this.apiCall('/transactions/make', 'POST', transactionData);
+                
+                // Close modal and reset form immediately
+                this.showCreateTransaction = false;
+                this.resetNewTransaction();
+                
+                // Show success message first
+                this.showSuccessMessage('Transaction created successfully!');
+                
+                // Reload data in background (don't await to avoid blocking UI)
+                setTimeout(() => {
+                    Promise.all([
+                        this.loadWallets(),
+                        this.loadTransactions(),
+                        this.loadLastTransactions(),
+                        this.loadGoals()
+                    ]).catch(err => console.error('Error reloading data:', err));
+                    
+                    if (this.selectedWallet) {
+                        this.loadWalletTransactions(this.selectedWallet.id).catch(err => 
+                            console.error('Error reloading wallet transactions:', err)
+                        );
+                    }
+                }, 100);
+            } catch (error) {
+                console.error('Error creating transaction:', error);
+                console.error('Error details:', error.response?.data || error.message);
+                this.showErrorMessage('Failed to create transaction');
+            }
+        },
+        
+        openCreateTransaction() {
+            // Pre-select the current wallet if we're in wallet detail view
+            if (this.selectedWallet) {
+                this.newTransaction.walletId = this.selectedWallet.id;
+            }
+            this.showCreateTransaction = true;
+        },
+        
+        openTransferModal() {
+            // Pre-select the source wallet if we're in wallet detail view
+            if (this.selectedWallet) {
+                this.transferForm.sourceWalletId = this.selectedWallet.id;
+            }
+            this.showTransferModal = true;
+        },
+        
+        isAdmin() {
+            if (!this.currentUser || !this.currentUser.role) {
+                return false;
+            }
+            const role = this.currentUser.role.toString().trim().toUpperCase();
+            console.log('Checking admin role:', role);
+            return role === 'ADMIN';
         }
     }
 }).mount('#app');
