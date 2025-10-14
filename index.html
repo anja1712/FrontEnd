@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wallettine - Money Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Toast Notification -->
+        <div v-if="showToast" :class="['toast-notification', toastType]">
+            <i :class="toastType === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle'"></i>
+            <span>{{ toastMessage }}</span>
+        </div>
+        
+        <!-- Confirmation Modal -->
+        <div v-if="showConfirmModal" class="modal-overlay" @click="cancelConfirmModal">
+            <div class="confirm-modal" @click.stop>
+                <div class="confirm-modal-header">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>{{ confirmModalTitle }}</h3>
+                </div>
+                <div class="confirm-modal-body">
+                    <p>{{ confirmModalMessage }}</p>
+                </div>
+                <div class="confirm-modal-actions">
+                    <button @click="cancelConfirmModal" class="btn-secondary">Cancel</button>
+                    <button @click="confirmAction" class="btn-danger">Delete</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading Screen -->
+        <div v-if="loading" class="loading-screen">
+            <div class="loading-spinner"></div>
+            <p>Loading Wallettine...</p>
+        </div>
+
+        <!-- Authentication Screen -->
+        <div v-if="!isAuthenticated && !loading" class="auth-container">
+            <div class="auth-card">
+                <div class="logo-section">
+                    <div class="logo">
+                        <i class="fas fa-wallet"></i>
+                        <h1>Wallettine</h1>
+                    </div>
+                    <p>Track your money, reach your goals</p>
+                </div>
+                
+                <div class="auth-tabs">
+                    <button @click="authMode = 'login'" :class="{ active: authMode === 'login' }">Login</button>
+                    <button @click="authMode = 'signup'" :class="{ active: authMode === 'signup' }">Sign Up</button>
+                </div>
+
+                <!-- Login Form -->
+                <form v-if="authMode === 'login'" @submit.prevent="login" class="auth-form">
+                    <div class="form-group">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" v-model="loginForm.email" placeholder="Email" required>
+                    </div>
+                    <div class="form-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" v-model="loginForm.password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="btn-primary" :disabled="loading">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </form>
+
+                <!-- Signup Form -->
+                <form v-if="authMode === 'signup'" @submit.prevent="signup" class="auth-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <i class="fas fa-user"></i>
+                            <input type="text" v-model="signupForm.firstName" placeholder="First Name" required>
+                        </div>
+                        <div class="form-group">
+                            <i class="fas fa-user"></i>
+                            <input type="text" v-model="signupForm.lastName" placeholder="Last Name" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <i class="fas fa-at"></i>
+                        <input type="text" v-model="signupForm.userName" placeholder="Username" required>
+                    </div>
+                    <div class="form-group">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" v-model="signupForm.email" placeholder="Email" required>
+                    </div>
+                    <div class="form-group">
+                        <i class="fas fa-calendar"></i>
+                        <input type="date" v-model="signupForm.birthDate" required>
+                    </div>
+                    <div class="form-group">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" v-model="signupForm.password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="btn-primary" :disabled="loading">
+                        <i class="fas fa-user-plus"></i> Sign Up
+                    </button>
+                </form>
+
+                <div v-if="errorMessage" class="error-message">
+                    {{ errorMessage }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Application -->
+        <div v-if="isAuthenticated" class="app-container">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <div class="logo-small">
+                        <i class="fas fa-wallet"></i>
+                        <span>Wallettine</span>
+                    </div>
+                </div>
+                <div class="header-center">
+                    <h2>{{ currentViewTitle }}</h2>
+                </div>
+                <div class="header-right">
+                    <div class="user-info" @click="toggleProfilePanel" style="cursor: pointer;">
+                        <span>{{ currentUser.userName }}</span>
+                        <div class="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <button v-if="isAdmin()" @click="toggleAdminPanel" class="admin-btn">
+                        <i class="fas fa-cog"></i> Admin Panel
+                    </button>
+                    <button @click="logout" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Admin View -->
+                <div v-if="currentView === 'admin'" class="admin-view">
+                    <div class="view-header">
+                        <button @click="currentView = 'wallets'" class="back-btn">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                    </div>
+                    <div class="admin-content">
+                        <!-- Dashboard Section -->
+                        <div class="admin-section">
+                            <h4><i class="fas fa-chart-bar"></i> System Dashboard</h4>
+                            <button @click="loadAdminDashboard" class="admin-action-btn">
+                                <i class="fas fa-tachometer-alt"></i> Load Dashboard
+                            </button>
+                            <div v-if="adminDashboard" class="admin-data-display">
+                                <h5>System Statistics</h5>
+                                <div class="stats-row">
+                                    <span>All Users: {{ adminDashboard.allUsers || 'N/A' }}</span>
+                                    <span>Active Users: {{ adminDashboard.activeUsers || 'N/A' }}</span>
+                                </div>
+                                <div class="stats-row">
+                                    <span>Total Balance: {{ adminDashboard.totalBalance || 'N/A' }}</span>
+                                    <span>Active User Balance: {{ adminDashboard.activeUserBalance || 'N/A' }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- User Management Section -->
+                        <div class="admin-section">
+                            <h4><i class="fas fa-users"></i> User Management</h4>
+                            <div class="admin-form-group">
+                                <input v-model="adminUserSearch" type="number" placeholder="User ID" class="admin-input">
+                                <button @click="getUserById" class="admin-action-btn">
+                                    <i class="fas fa-search"></i> Get User
+                                </button>
+                            </div>
+                            <div v-if="selectedUser" class="user-details">
+                                <h5>User Details</h5>
+                                <p><strong>Name:</strong> {{ selectedUser.firstName }} {{ selectedUser.lastName }}</p>
+                                <p><strong>Email:</strong> {{ selectedUser.email }}</p>
+                                <p><strong>Username:</strong> {{ selectedUser.userName }}</p>
+                                <p><strong>Role:</strong> {{ selectedUser.role }}</p>
+                                <p><strong>Status:</strong> {{ selectedUser.blocked ? 'Blocked' : 'Active' }}</p>
+                                <div v-if="selectedUser.adminNote" class="admin-note">
+                                    <div class="admin-note-content">
+                                        <strong>Admin Note:</strong> {{ selectedUser.adminNote }}
+                                    </div>
+                                    <button @click="deleteAdminNote" class="delete-note-btn">
+                                        <i class="fas fa-trash"></i> Delete Note
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="admin-form-group">
+                                <select v-model="selectedUserStatus" class="admin-input">
+                                    <option value="ACTIVE">Active</option>
+                                    <option value="BLOCKED">Blocked</option>
+                                </select>
+                                <button @click="changeUserStatus" class="admin-action-btn" :disabled="!selectedUserId">
+                                    <i class="fas fa-user-edit"></i> Change Status
+                                </button>
+                            </div>
+                            <div class="admin-form-group">
+                                <input v-model="adminNote" type="text" placeholder="Admin note" class="admin-input">
+                                <button @click="addAdminNote" class="admin-action-btn" :disabled="!selectedUserId">
+                                    <i class="fas fa-sticky-note"></i> Add Note
+                                </button>
+                            </div>
+                            <button @click="getUserTransactions" class="admin-action-btn" :disabled="!selectedUserId">
+                                <i class="fas fa-list"></i> View User Transactions
+                            </button>
+                            
+                            <div v-if="monitoredTransactions.length > 0" class="admin-data-display" style="margin-top: 15px;">
+                                <h5>User Transactions ({{ monitoredTransactions.length }})</h5>
+                                <div v-for="transaction in monitoredTransactions" :key="transaction.id" class="transaction-item">
+                                    <div class="transaction-info">
+                                        <strong>{{ transaction.name }}</strong>
+                                        <span>Category: {{ transaction.category || 'N/A' }}</span>
+                                        <span>Type: {{ transaction.transactionType }}</span>
+                                    </div>
+                                    <div class="transaction-details">
+                                        <span class="amount">{{ transaction.amount }} {{ transaction.currency }}</span>
+                                        <small>{{ formatDate(transaction.date) }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category Management Section -->
+                        <div class="admin-section">
+                            <h4><i class="fas fa-tags"></i> Category Management</h4>
+                            <button @click="loadAdminCategories" class="admin-action-btn">
+                                <i class="fas fa-list"></i> Load All Categories
+                            </button>
+                            <div v-if="adminCategories.length > 0" class="admin-data-display">
+                                <h5>All Categories</h5>
+                                <div v-for="category in adminCategories" :key="category.id" class="category-item">
+                                    <span>{{ category.name }} ({{ category.transactionType }})</span>
+                                    <button @click="deleteCategory(category.id)" class="delete-btn">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="admin-form-group">
+                                <input v-model="newCategory.name" type="text" placeholder="Category name" class="admin-input">
+                                <select v-model="newCategory.transactionType" class="admin-input">
+                                    <option value="INCOME">Income</option>
+                                    <option value="EXPENSE">Expense</option>
+                                </select>
+                                <button @click="createCategory" class="admin-action-btn">
+                                    <i class="fas fa-plus"></i> Create Category
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Currency Management Section -->
+                        <div class="admin-section">
+                            <h4><i class="fas fa-coins"></i> Currency Management</h4>
+                            <button @click="loadCurrencies" class="admin-action-btn">
+                                <i class="fas fa-list"></i> Load All Currencies
+                            </button>
+                            <div v-if="currencies.length > 0" class="admin-data-display">
+                                <h5>All Currencies</h5>
+                                <div v-for="currency in currencies" :key="currency.id" class="currency-item">
+                                    <span>{{ currency.name }} - Rate: {{ currency.currencyValue }}</span>
+                                    <button @click="deleteCurrency(currency.id)" class="delete-btn">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="admin-form-group">
+                                <input v-model="newCurrency.name" type="text" placeholder="Currency name (e.g., USD, EUR)" class="admin-input">
+                                <input v-model.number="newCurrency.exchangeRateToDollar" type="number" step="0.01" placeholder="Exchange rate to USD" class="admin-input">
+                                <button @click="createCurrency" class="admin-action-btn">
+                                    <i class="fas fa-plus"></i> Create Currency
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Transaction Monitoring Section -->
+                        <div class="admin-section">
+                            <h4><i class="fas fa-search"></i> Transaction Monitoring</h4>
+                            <div class="monitoring-filters">
+                                <div class="admin-form-group">
+                                    <input v-model.number="monitoringRequest.userId" type="number" placeholder="User ID (optional)" class="admin-input">
+                                    <input v-model="monitoringRequest.category" type="text" placeholder="Category (optional)" class="admin-input">
+                                </div>
+                                <div class="admin-form-group">
+                                    <input v-model.number="monitoringRequest.amount" type="number" step="0.01" placeholder="Amount (optional)" class="admin-input">
+                                    <select v-model="monitoringRequest.amountGreaterOrEqual" class="admin-input">
+                                        <option :value="true">Greater or Equal</option>
+                                        <option :value="false">Less Than</option>
+                                    </select>
+                                </div>
+                                <div class="admin-form-group">
+                                    <input v-model="monitoringRequest.date" type="datetime-local" placeholder="Date (optional)" class="admin-input">
+                                    <select v-model="monitoringRequest.dateAfterOrEqual" class="admin-input">
+                                        <option :value="true">After or Equal</option>
+                                        <option :value="false">Before</option>
+                                    </select>
+                                </div>
+                                <div class="admin-form-group">
+                                    <label class="checkbox-label">
+                                        <input v-model="monitoringRequest.sortByDate" type="checkbox">
+                                        Sort by Date
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input v-model="monitoringRequest.sortByAmount" type="checkbox">
+                                        Sort by Amount
+                                    </label>
+                                    <button @click="monitorTransactions" class="admin-action-btn">
+                                        <i class="fas fa-search"></i> Monitor
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="monitoredTransactions.length > 0" class="admin-data-display">
+                                <h5>Found {{ monitoredTransactions.length }} Transaction(s)</h5>
+                                <div v-for="transaction in monitoredTransactions" :key="transaction.id" class="transaction-item">
+                                    <div class="transaction-info">
+                                        <strong>{{ transaction.name }}</strong>
+                                        <span>User ID: {{ transaction.user?.id || 'N/A' }}</span>
+                                        <span>Category: {{ transaction.category || 'N/A' }}</span>
+                                    </div>
+                                    <div class="transaction-details">
+                                        <span class="amount">{{ transaction.amount }} {{ transaction.currency }}</span>
+                                        <small>{{ formatDate(transaction.transactionDate) }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else-if="monitoredTransactions.length === 0 && monitoredTransactions !== null" class="admin-data-display">
+                                <p>No transactions found matching the criteria.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- Profile Panel Overlay -->
+            <div v-if="showProfilePanel" class="profile-overlay" @click="showProfilePanel = false">
+                <div class="profile-panel" @click.stop>
+                    <div class="profile-header">
+                        <h3><i class="fas fa-user"></i> Profile Settings</h3>
+                        <button @click="showProfilePanel = false" class="close-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="profile-content">
+                        <div class="profile-section">
+                            <h4><i class="fas fa-edit"></i> Edit Profile</h4>
+                            <div class="profile-form-group">
+                                <input v-model="profileForm.firstName" type="text" placeholder="First Name" class="profile-input">
+                                <input v-model="profileForm.lastName" type="text" placeholder="Last Name" class="profile-input">
+                                <input v-model="profileForm.userName" type="text" placeholder="Username" class="profile-input">
+                                <input v-model="profileForm.email" type="email" placeholder="Email" class="profile-input">
+                                <input v-model="profileForm.birthDate" type="date" placeholder="Birth Date" class="profile-input">
+                                <button @click="updateProfile" class="profile-action-btn" :disabled="profileLoading">
+                                    <i class="fas fa-save"></i> {{ profileLoading ? 'Saving...' : 'Save Changes' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Dashboard View -->
+                <div v-if="currentView === 'dashboard'" class="dashboard">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-wallet"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>{{ totalWallets }}</h3>
+                                <p>Total Wallets</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-dollar-sign"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>{{ totalBalance }}</h3>
+                                <p>Total Balance</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>{{ monthlyIncome }}</h3>
+                                <p>This Month</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line-down"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>{{ monthlyExpenses }}</h3>
+                                <p>This Month</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-content">
+
+                        <div class="transactions-section">
+                            <div class="section-header">
+                                <h3>Recent Transactions</h3>
+                                <button @click="currentView = 'transactions'" class="btn-secondary">
+                                    View All
+                                </button>
+                            </div>
+                            <div class="transactions-list">
+                                <div v-for="transaction in recentTransactions" :key="transaction.id" class="transaction-item">
+                                    <div class="transaction-icon">
+                                        <i :class="getTransactionIcon(transaction.type)"></i>
+                                    </div>
+                                    <div class="transaction-details">
+                                        <h4>{{ transaction.name }}</h4>
+                                        <p>{{ formatDate(transaction.date) }}</p>
+                                    </div>
+                                    <div class="transaction-amount" :class="transaction.type.toLowerCase()">
+                                        {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, getWalletCurrency(transaction.walletId)) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wallets View -->
+                <div v-if="currentView === 'wallets'" class="wallets-view">
+                    <div class="view-header">
+                        <div class="wallet-switcher">
+                            <button 
+                                @click="walletFilter = 'active'" 
+                                :class="['switcher-btn', { active: walletFilter === 'active' }]">
+                                Active
+                            </button>
+                            <button 
+                                @click="walletFilter = 'archived'" 
+                                :class="['switcher-btn', { active: walletFilter === 'archived' }]">
+                                Archived
+                            </button>
+                        </div>
+                        <button @click="showCreateWallet = true" class="btn-primary btn-narrow">
+                            <i class="fas fa-plus"></i> Add Wallet
+                        </button>
+                    </div>
+                    <div class="wallets-grid">
+                        <div v-for="wallet in filteredWallets" :key="wallet.id" class="wallet-card" @click="selectWallet(wallet)">
+                            <div class="wallet-header">
+                                <h4>{{ wallet.name }}</h4>
+                                <div class="wallet-actions">
+                                    <button @click.stop="editWallet(wallet)" class="action-btn" title="Edit wallet">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button @click.stop="archiveWallet(wallet)" class="action-btn" title="Archive wallet">
+                                        <i :class="wallet.archived ? 'fas fa-archive' : 'fas fa-archive'"></i>
+                                    </button>
+                                    <button @click.stop="deleteWallet(wallet)" class="action-btn delete-btn" title="Delete wallet">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="wallet-balance">
+                                <span class="currency-code">{{ wallet.currency }}</span>
+                                <span class="balance-amount">{{ (wallet.balance || 0).toFixed(2) }}</span>
+                            </div>
+                            <div class="wallet-footer">
+                                <span v-if="wallet.savings" class="savings-badge">Savings</span>
+                                <span v-if="wallet.archived" class="archived-badge">Archived</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wallet Detail View -->
+                <div v-if="currentView === 'wallet-detail'" class="wallet-detail-view">
+                    <div class="view-header">
+                        <button @click="currentView = 'wallets'" class="back-btn">
+                            <i class="fas fa-arrow-left"></i> Back to Wallets
+                        </button>
+                        <div class="wallet-balance-display">
+                            <span class="wallet-detail-balance">
+                                <span class="currency-code">{{ selectedWallet?.currency }}</span>
+                                <span class="balance-amount">{{ (selectedWallet?.balance || 0).toFixed(2) }}</span>
+                            </span>
+                        </div>
+                        <div class="wallet-actions">
+                            <button @click="openCreateTransaction" class="btn-primary btn-narrow">
+                                <i class="fas fa-plus"></i> Add Transaction
+                            </button>
+                            <button @click="openTransferModal" class="btn-secondary btn-narrow">
+                                <i class="fas fa-exchange-alt"></i> Transfer
+                            </button>
+                        </div>
+                    </div>
+                    <div class="transactions-list">
+                        <div v-for="transaction in walletTransactions" :key="transaction.id" class="transaction-item">
+                            <div class="transaction-icon">
+                                <i :class="getTransactionIcon(transaction.type)"></i>
+                            </div>
+                            <div class="transaction-details">
+                                <h4>{{ transaction.name }}</h4>
+                                <p>{{ formatDate(transaction.date) }}</p>
+                            </div>
+                            <div class="transaction-amount" :class="transaction.type.toLowerCase()">
+                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, selectedWallet?.currency) }}
+                            </div>
+                        </div>
+                        <div v-if="walletTransactions.length === 0" class="no-transactions">
+                            <i class="fas fa-inbox"></i>
+                            <p>No transactions found for this wallet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transactions View -->
+                <div v-if="currentView === 'transactions'" class="transactions-view">
+                    <div class="view-header">
+                        <button @click="currentView = 'wallets'" class="back-btn">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                        <div class="statistics-controls">
+                            <select v-model="statisticsRequest.currency" class="currency-select">
+                                <option v-for="currency in currencies" :key="currency.id" :value="currency.name">
+                                    {{ currency.name }}
+                                </option>
+                            </select>
+                            <button @click="loadTransactionStatistics" class="btn-primary btn-narrow">
+                                <i class="fas fa-chart-bar"></i> Load Statistics
+                            </button>
+                        </div>
+                        <button @click="showCreateTransaction = true" class="btn-primary btn-narrow">
+                            <i class="fas fa-plus"></i> Add Transaction
+                        </button>
+                    </div>
+                    
+                    <!-- Transaction Statistics -->
+                    <div v-if="transactionStatistics" class="statistics-panel">
+                        <h3>Transaction Statistics (Last 30 Days)</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon income">
+                                    <i class="fas fa-arrow-up"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>{{ transactionStatistics.income || 0 }}</h3>
+                                    <p>Total Income</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon expense">
+                                    <i class="fas fa-arrow-down"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>{{ transactionStatistics.expense || 0 }}</h3>
+                                    <p>Total Expenses</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div v-if="transactionStatistics.transactionsByCategories && Object.keys(transactionStatistics.transactionsByCategories).length > 0" class="categories-section">
+                            <h4>Transactions by Category</h4>
+                            <div v-for="(amount, category) in transactionStatistics.transactionsByCategories" :key="category" class="category-item">
+                                <span class="category-name">{{ category }}</span>
+                                <span class="category-amount">{{ amount.toFixed(2) }} {{ statisticsRequest.currency }}</span>
+                            </div>
+                        </div>
+                        
+                        <div v-if="transactionStatistics.topTenExpenses && transactionStatistics.topTenExpenses.length > 0" class="top-expenses">
+                            <h4>Top 10 Expenses</h4>
+                            <div v-for="(expense, index) in transactionStatistics.topTenExpenses" :key="index" class="expense-item">
+                                <span class="expense-name">{{ Object.keys(expense)[0] }}</span>
+                                <span class="expense-amount">{{ Object.values(expense)[0].toFixed(2) }} {{ statisticsRequest.currency }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Transaction Filter Switcher -->
+                    <div class="transaction-filter-section">
+                        <div class="wallet-switcher">
+                            <button 
+                                @click="transactionFilter = 'all'" 
+                                :class="['switcher-btn', { active: transactionFilter === 'all' }]">
+                                All
+                            </button>
+                            <button 
+                                @click="transactionFilter = 'recurring'" 
+                                :class="['switcher-btn', { active: transactionFilter === 'recurring' }]">
+                                Recurring
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Transactions List -->
+                    <div class="transactions-list">
+                        <div v-for="transaction in filteredTransactions" :key="transaction.id" 
+                             :class="['transaction-item', { recurring: transaction.recurring }]">
+                            <div class="transaction-icon">
+                                <i :class="getTransactionIcon(transaction.type)"></i>
+                            </div>
+                            <div class="transaction-details">
+                                <h4>
+                                    {{ transaction.name }}
+                                    <span v-if="transaction.recurring" class="recurring-badge">
+                                        <i class="fas fa-sync-alt"></i> {{ transaction.frequency || 'Recurring' }}
+                                    </span>
+                                </h4>
+                                <p>{{ formatDate(transaction.transactionDate) }}</p>
+                            </div>
+                            <div class="transaction-amount" :class="transaction.type.toLowerCase()">
+                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, getWalletCurrency(transaction.walletId)) }}
+                            </div>
+                            <button v-if="transaction.recurring" 
+                                    @click.stop="disableRecurring(transaction.id)" 
+                                    class="disable-recurring-btn"
+                                    title="Disable recurring">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div v-if="filteredTransactions.length === 0" class="no-transactions">
+                            <i class="fas fa-inbox"></i>
+                            <p>No transactions found</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goals View -->
+                <div v-if="currentView === 'goals'" class="goals-view">
+                    <div class="view-header">
+                        <button @click="currentView = 'wallets'" class="back-btn">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                        <button @click="showCreateGoal = true" class="btn-primary btn-narrow">
+                            <i class="fas fa-plus"></i> Add Goal
+                        </button>
+                    </div>
+                    <div class="goals-list">
+                        <div v-for="goal in goals" :key="goal.id" class="goal-item">
+                            <div class="goal-header">
+                                <h4>{{ goal.name }}</h4>
+                                <div class="goal-actions">
+                                    <button @click="editGoal(goal)" class="action-btn" title="Edit goal">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button @click="deleteGoal(goal.id)" class="action-btn delete-btn" title="Delete goal">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="goal-progress">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" :style="{ width: getGoalProgress(goal) + '%' }"></div>
+                                </div>
+                                <div class="progress-text">
+                                    {{ formatCurrency(goal.currentAmount, getWalletCurrency(goal.walletId)) }} / {{ formatCurrency(goal.goalAmount, getWalletCurrency(goal.walletId)) }}
+                                </div>
+                            </div>
+                            <div class="goal-details">
+                                <div class="goal-info">
+                                    <span class="goal-amount">{{ formatCurrency(goal.goalAmount - goal.currentAmount, getWalletCurrency(goal.walletId)) }} remaining</span>
+                                    <span class="goal-date">Target: {{ formatDate(goal.targetDate) }}</span>
+                                </div>
+                                <div class="goal-percentage">{{ Math.round(getGoalProgress(goal)) }}%</div>
+                            </div>
+                        </div>
+                        <div v-if="goals.length === 0" class="no-goals">
+                            <i class="fas fa-bullseye"></i>
+                            <p>No goals set yet. Create your first savings goal!</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Bottom Navigation -->
+            <nav class="bottom-nav">
+                <button @click="currentView = 'wallets'" :class="{ active: currentView === 'wallets' }" class="nav-item">
+                    <i class="fas fa-wallet"></i>
+                    <span>Wallets</span>
+                </button>
+                <button @click="currentView = 'transactions'" :class="{ active: currentView === 'transactions' }" class="nav-item">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Transactions</span>
+                </button>
+                <button @click="currentView = 'goals'" :class="{ active: currentView === 'goals' }" class="nav-item">
+                    <i class="fas fa-bullseye"></i>
+                    <span>Goals</span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- Create Wallet Modal -->
+        <div v-if="showCreateWallet" class="modal-overlay" @click="showCreateWallet = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Create New Wallet</h3>
+                    <button @click="showCreateWallet = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="createWallet" class="modal-form">
+                    <div class="form-group">
+                        <label>Wallet Name</label>
+                        <input type="text" v-model="newWallet.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Initial Amount</label>
+                        <input type="number" v-model="newWallet.initialAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select v-model="newWallet.currency" required>
+                            <option v-for="currency in currencies" :key="currency.id" :value="currency.name">
+                                {{ currency.name }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <span>Savings Wallet</span>
+                            <input type="checkbox" v-model="newWallet.savings" style="width: 20px; height: 20px; cursor: pointer;">
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showCreateWallet = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Create Wallet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Create Transaction Modal -->
+        <div v-if="showCreateTransaction" class="modal-overlay" @click="showCreateTransaction = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Add Transaction</h3>
+                    <button @click="showCreateTransaction = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="createTransaction" class="modal-form">
+                    <div class="form-group">
+                        <label>Transaction Name</label>
+                        <input type="text" v-model="newTransaction.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" v-model="newTransaction.amount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select v-model="newTransaction.currency" required>
+                            <option v-for="currency in currencies" :key="currency.id" :value="currency.name">
+                                {{ currency.name }}
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select v-model="newTransaction.type" required>
+                            <option value="INCOME">Income</option>
+                            <option value="EXPENSE">Expense</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Wallet</label>
+                        <select v-model="newTransaction.walletId" required>
+                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ wallet.currency }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <input type="text" v-model="newTransaction.category" required>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <span>Recurring Transaction</span>
+                            <input type="checkbox" v-model="newTransaction.recurring" style="width: 20px; height: 20px; cursor: pointer;">
+                        </label>
+                    </div>
+                    <div class="form-group" v-if="newTransaction.recurring">
+                        <label>Frequency</label>
+                        <select v-model="newTransaction.frequency" :required="newTransaction.recurring">
+                            <option :value="null">Select Frequency</option>
+                            <option value="DAILY">Daily</option>
+                            <option value="WEEKLY">Weekly</option>
+                            <option value="MONTHLY">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="form-group" v-if="newTransaction.type === 'INCOME' && walletGoals.length > 0">
+                        <label>Link to Goal (Optional)</label>
+                        <select v-model="newTransaction.goal">
+                            <option :value="null">No Goal</option>
+                            <option v-for="goal in walletGoals" :key="goal.id" :value="goal.name">
+                                {{ goal.name }} ({{ Math.round(getGoalProgress(goal)) }}% complete)
+                            </option>
+                        </select>
+                        <small class="form-help">This income will count towards the selected goal</small>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showCreateTransaction = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Add Transaction</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Transfer Modal -->
+        <div v-if="showTransferModal" class="modal-overlay" @click="showTransferModal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Transfer Funds</h3>
+                    <button @click="showTransferModal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="transferFunds" class="modal-form">
+                    <div class="form-group">
+                        <label>From Wallet</label>
+                        <select v-model="transferForm.sourceWalletId" required>
+                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>To Wallet</label>
+                        <select v-model="transferForm.destinationWalletId" required>
+                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id" :disabled="wallet.id === transferForm.sourceWalletId">
+                                {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" v-model="transferForm.amount" step="0.01" required>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showTransferModal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Transfer Funds</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Wallet Modal -->
+        <div v-if="showEditWallet" class="modal-overlay" @click="showEditWallet = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Edit Wallet</h3>
+                    <button @click="showEditWallet = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="updateWallet" class="modal-form">
+                    <div class="form-group">
+                        <label>Wallet Name</label>
+                        <input type="text" v-model="editWalletForm.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Amount</label>
+                        <input type="number" v-model="editWalletForm.currentAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select v-model="editWalletForm.currency" required>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="RSD">RSD</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <span>Savings</span>
+                            <input type="checkbox" v-model="editWalletForm.savings" style="width: 20px; height: 20px; cursor: pointer;">
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showEditWallet = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Update Wallet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Create Goal Modal -->
+        <div v-if="showCreateGoal" class="modal-overlay" @click="showCreateGoal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Create New Goal</h3>
+                    <button @click="showCreateGoal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="createGoal" class="modal-form">
+                    <div class="form-group">
+                        <label>Goal Name</label>
+                        <input type="text" v-model="newGoal.name" placeholder="e.g., Vacation Fund" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Starting Amount (Optional)</label>
+                        <input type="number" v-model="newGoal.currentAmount" step="0.01" placeholder="0.00" min="0">
+                        <small class="form-help">Leave at 0 to start fresh, or set an initial amount</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Amount</label>
+                        <input type="number" v-model="newGoal.goalAmount" step="0.01" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Date</label>
+                        <input type="date" v-model="newGoal.targetDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Savings Wallet</label>
+                        <select v-model="newGoal.walletId" required>
+                            <option value="">Select a savings wallet</option>
+                            <option v-for="wallet in savingsWallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ wallet.currency }})
+                            </option>
+                        </select>
+                        <small class="form-help">Only savings wallets can be used for goals</small>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showCreateGoal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Create Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Edit Goal Modal -->
+        <div v-if="showEditGoal" class="modal-overlay" @click="showEditGoal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h3>Edit Goal</h3>
+                    <button @click="showEditGoal = false" class="close-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form @submit.prevent="updateGoal" class="modal-form">
+                    <div class="form-group">
+                        <label>Goal Name</label>
+                        <input type="text" v-model="editGoalForm.name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Amount</label>
+                        <input type="number" v-model="editGoalForm.currentAmount" step="0.01" min="0" required>
+                        <small class="form-help">Manually adjust the current progress</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Amount</label>
+                        <input type="number" v-model="editGoalForm.goalAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Date</label>
+                        <input type="date" v-model="editGoalForm.targetDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Savings Wallet</label>
+                        <select v-model="editGoalForm.walletId" required>
+                            <option v-for="wallet in savingsWallets" :key="wallet.id" :value="wallet.id">
+                                {{ wallet.name }} ({{ wallet.currency }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" @click="showEditGoal = false" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Update Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
