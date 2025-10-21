@@ -237,21 +237,17 @@ createApp({
     async mounted() {
         // Check if user is already logged in (JWT token in localStorage)
         const token = localStorage.getItem('authToken');
-        console.log('Page loaded, checking for token in localStorage:', token ? 'Found' : 'Not found');
         if (token) {
             this.authToken = token;
-            console.log('Token set in Vue data:', this.authToken);
             try {
                 // Call /auth/me to validate token and get user data
                 const response = await this.apiCall('/auth/me', 'GET');
-                console.log('/auth/me response:', response);
                 if (response.data) {
                     this.currentUser = response.data;
                     this.isAuthenticated = true;
                     await this.loadUserData();
                 }
             } catch (error) {
-                console.log('Invalid token or error loading user, clearing auth');
                 console.error(error);
                 this.clearAuth();
             } finally {
@@ -274,8 +270,6 @@ createApp({
             this.loading = true;
             this.errorMessage = '';
             
-            console.log('Attempting login with:', this.loginForm.email);
-            
             try {
                 // Backend expects JSON body with UserRequest
                 const loginData = {
@@ -283,27 +277,14 @@ createApp({
                     password: this.loginForm.password
                 };
                 
-                console.log('Sending login request...');
                 const response = await this.apiCall('/auth/login', 'POST', loginData);
-                console.log('Login response received:', response);
                 
                 // Extract user data and token from response
                 this.currentUser = response.data.user;
                 this.authToken = response.data.token;
                 
-                console.log('Login successful, user data:', this.currentUser);
-                console.log('JWT token received:', this.authToken);
-                console.log('User role:', this.currentUser.role);
-                console.log('Role type:', typeof this.currentUser.role);
-                console.log('Role comparison with ADMIN:', this.currentUser.role === 'ADMIN');
-                console.log('Role comparison with admin:', this.currentUser.role === 'admin');
-                console.log('Role length:', this.currentUser.role?.length);
-                console.log('Role char codes:', this.currentUser.role?.split('').map(c => c.charCodeAt(0)));
-                console.log('Full user object keys:', Object.keys(this.currentUser));
-                
                 // Store token in localStorage
                 localStorage.setItem('authToken', this.authToken);
-                console.log('Token stored in localStorage:', localStorage.getItem('authToken'));
                 
                 this.isAuthenticated = true;
                 this.currentView = 'wallets';
@@ -337,9 +318,6 @@ createApp({
                 this.currentUser = response.data.user;
                 this.authToken = response.data.token;
                 
-                console.log('Signup successful, user data:', this.currentUser);
-                console.log('JWT token received:', this.authToken);
-                
                 // Store token in localStorage
                 localStorage.setItem('authToken', this.authToken);
                 
@@ -366,7 +344,7 @@ createApp({
             try {
                 await this.apiCall('/auth/logout', 'POST');
             } catch (error) {
-                console.log('Logout error:', error);
+                console.error('Logout error:', error);
             } finally {
                 this.clearAuth();
             }
@@ -391,12 +369,8 @@ createApp({
         // Data Loading Methods
         async loadUserData() {
             if (!this.currentUser) {
-                console.log('No current user, skipping loadUserData');
                 return;
             }
-            
-            console.log('Loading user data for user:', this.currentUser.id);
-            console.log('Auth token present:', !!this.authToken);
             
             try {
                 await Promise.all([
@@ -417,11 +391,9 @@ createApp({
         
         async loadWallets() {
             try {
-                console.log('Loading wallets for user:', this.currentUser.id);
                 const response = await this.apiCall(`/wallets/${this.currentUser.id}/all`, 'GET');
                 this.wallets = response.data || [];
                 this.totalWallets = this.wallets.length;
-                console.log('Wallets loaded:', this.wallets);
             } catch (error) {
                 console.error('Error loading wallets:', error);
                 this.wallets = [];
@@ -459,10 +431,8 @@ createApp({
         
         async loadLastTransactions() {
             try {
-                console.log('Loading last 10 transactions for user:', this.currentUser.id);
                 const response = await this.apiCall(`/transactions/users/${this.currentUser.id}/last`, 'GET');
                 this.lastTransactions = response.data || [];
-                console.log('Last transactions loaded:', this.lastTransactions);
             } catch (error) {
                 console.error('Error loading last transactions:', error);
             }
@@ -470,10 +440,8 @@ createApp({
         
         async loadGoals() {
             try {
-                console.log('Loading goals for user:', this.currentUser.id);
                 const response = await this.apiCall(`/goals/${this.currentUser.id}/all`, 'GET');
                 this.goals = response.data || [];
-                console.log('Goals loaded:', this.goals);
             } catch (error) {
                 console.error('Error loading goals:', error);
                 this.goals = [];
@@ -637,6 +605,16 @@ createApp({
             this.currentView = 'wallet-detail';
         },
         
+        async selectWallet(wallet) {
+            this.selectedWallet = wallet;
+            console.log('Selected wallet:', wallet);
+            
+            await this.loadWalletTransactions(wallet.id);
+            
+            // Show wallet transactions view
+            this.currentView = 'wallet-detail';
+        },
+        
         // Transaction Methods (moved to line ~1081 with proper currency handling)
         
         async transferFunds(sourceWalletId, destinationWalletId, amount) {
@@ -658,11 +636,20 @@ createApp({
         // Goal Methods
         async createGoal() {
             try {
+                const currentAmount = this.newGoal.currentAmount ? parseFloat(this.newGoal.currentAmount) : 0;
+                const goalAmount = parseFloat(this.newGoal.goalAmount);
+                
+                // Validate current amount doesn't exceed goal amount
+                if (currentAmount > goalAmount) {
+                    this.showErrorMessage('Current amount cannot exceed target amount');
+                    return;
+                }
+                
                 const goalData = {
                     name: this.newGoal.name,
                     walletId: this.newGoal.walletId,
-                    currentAmount: this.newGoal.currentAmount ? parseFloat(this.newGoal.currentAmount) : 0,
-                    goalAmount: parseFloat(this.newGoal.goalAmount),
+                    currentAmount: currentAmount,
+                    goalAmount: goalAmount,
                     targetDate: new Date(this.newGoal.targetDate).toISOString()
                 };
                 
@@ -672,7 +659,7 @@ createApp({
                 this.resetNewGoal();
                 this.showSuccessMessage('Goal created successfully!');
             } catch (error) {
-                this.showErrorMessage('Failed to create goal');
+                this.showErrorMessage(error.response?.data || 'Failed to create goal');
             }
         },
         
@@ -690,11 +677,20 @@ createApp({
         
         async updateGoal() {
             try {
+                const currentAmount = this.editGoalForm.currentAmount ? parseFloat(this.editGoalForm.currentAmount) : 0;
+                const goalAmount = parseFloat(this.editGoalForm.goalAmount);
+                
+                // Validate current amount doesn't exceed goal amount
+                if (currentAmount > goalAmount) {
+                    this.showErrorMessage('Current amount cannot exceed target amount');
+                    return;
+                }
+                
                 const goalData = {
                     name: this.editGoalForm.name,
                     walletId: this.editGoalForm.walletId,
-                    currentAmount: this.editGoalForm.currentAmount ? parseFloat(this.editGoalForm.currentAmount) : 0,
-                    goalAmount: parseFloat(this.editGoalForm.goalAmount),
+                    currentAmount: currentAmount,
+                    goalAmount: goalAmount,
                     targetDate: new Date(this.editGoalForm.targetDate).toISOString()
                 };
                 
@@ -709,7 +705,7 @@ createApp({
                 this.showEditGoal = false;
                 this.showSuccessMessage('Goal updated successfully!');
             } catch (error) {
-                this.showErrorMessage('Failed to update goal');
+                this.showErrorMessage(error.response?.data || 'Failed to update goal');
             }
         },
         
@@ -733,10 +729,6 @@ createApp({
         
         // Admin Methods
         async loadAdminDashboard() {
-            console.log('Loading admin dashboard...');
-            console.log('Current user:', this.currentUser);
-            console.log('Is authenticated:', this.isAuthenticated);
-            
             try {
                 const response = await this.apiCall('/admin/dashboard', 'GET');
                 this.adminDashboard = response.data;
@@ -772,9 +764,11 @@ createApp({
             
             try {
                 const response = await this.apiCall(`/admin/users/${this.selectedUserId}/status?status=${this.selectedUserStatus}`, 'PUT');
-                this.showSuccessMessage(response.data);
-                // Refresh user data
-                await this.getUserById();
+                this.showSuccessMessage('User status changed successfully');
+                // Refresh user data silently
+                const userResponse = await this.apiCall(`/users/${this.selectedUserId}`, 'GET');
+                this.selectedUser = userResponse.data;
+                this.selectedUserStatus = userResponse.data.blocked ? 'BLOCKED' : 'ACTIVE';
             } catch (error) {
                 this.showErrorMessage('Failed to change user status: ' + (error.response?.data || error.message));
             }
@@ -881,7 +875,6 @@ createApp({
             try {
                 const response = await this.apiCall('/admin/currencies/all', 'GET');
                 this.currencies = response.data;
-                console.log('Currencies loaded:', this.currencies);
             } catch (error) {
                 console.error('Failed to load currencies:', error);
                 // Fallback to empty array if loading fails
@@ -932,7 +925,6 @@ createApp({
                 this.showErrorMessage('Please select only one sorting method (Date OR Amount, not both)');
                 return;
             }
-            
             // Build the request with only non-null/non-empty values
             const request = {};
             
@@ -942,24 +934,31 @@ createApp({
             }
             if (this.monitoringRequest.amount) {
                 request.amount = this.monitoringRequest.amount;
-                request.amountGreaterOrEqual = this.monitoringRequest.amountGreaterOrEqual;
+                // Convert string to boolean if needed
+                request.amountGreaterOrEqual = this.monitoringRequest.amountGreaterOrEqual === 'true' || this.monitoringRequest.amountGreaterOrEqual === true;
             }
             if (this.monitoringRequest.date) {
                 // Convert datetime-local to ISO string
                 request.date = new Date(this.monitoringRequest.date).toISOString();
-                request.dateAfterOrEqual = this.monitoringRequest.dateAfterOrEqual;
+                // Convert string to boolean if needed
+                request.dateAfterOrEqual = this.monitoringRequest.dateAfterOrEqual === 'true' || this.monitoringRequest.dateAfterOrEqual === true;
             }
+            
+            // Check if at least one criteria is provided (excluding sort options)
+            const hasCriteria = request.userId || request.category || request.amount || request.date;
+            if (!hasCriteria) {
+                this.showErrorMessage('No criteria provided. Please enter at least one filter.');
+                this.monitoredTransactions = [];
+                return;
+            }
+            
             request.sortByDate = this.monitoringRequest.sortByDate;
             request.sortByAmount = this.monitoringRequest.sortByAmount;
-            
-            console.log('Sending request:', request);
             
             try {
                 // Use POST instead of GET since GET with body is problematic
                 const response = await this.apiCall('/admin/monitor', 'POST', request);
-                console.log('Monitor response:', response);
                 this.monitoredTransactions = response.data || [];
-                console.log('Monitored transactions count:', this.monitoredTransactions.length);
                 this.showSuccessMessage(`Found ${this.monitoredTransactions.length} transactions`);
             } catch (error) {
                 console.error('Monitor error:', error);
@@ -990,14 +989,9 @@ createApp({
         
         // Statistics Methods
         calculateStats() {
-            console.log('Calculating stats...');
-            console.log('Wallets:', this.wallets);
-            console.log('Transactions:', this.allTransactions);
-            
             this.totalWallets = this.wallets.length;
             this.totalBalance = this.wallets.reduce((sum, wallet) => {
                 const balance = parseFloat(wallet.balance || wallet.currentAmount || 0);
-                console.log(`Wallet ${wallet.name} balance:`, balance);
                 return sum + balance;
             }, 0);
             
@@ -1018,13 +1012,6 @@ createApp({
             this.monthlyExpenses = monthlyTransactions
                 .filter(t => t.type === 'EXPENSE')
                 .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-            
-            console.log('Stats calculated:', {
-                totalWallets: this.totalWallets,
-                totalBalance: this.totalBalance,
-                monthlyIncome: this.monthlyIncome,
-                monthlyExpenses: this.monthlyExpenses
-            });
         },
         
         resetStats() {
@@ -1046,9 +1033,6 @@ createApp({
             // Add JWT token to Authorization header if available
             if (this.authToken) {
                 config.headers['Authorization'] = `Bearer ${this.authToken}`;
-                console.log('Authorization header set:', config.headers['Authorization']);
-            } else {
-                console.log('No auth token available for this request');
             }
             
             if (data) {
@@ -1062,18 +1046,8 @@ createApp({
                 }
             }
             
-            // Debug logging
-            console.log(`API Call: ${method} ${url}`);
-            console.log('Auth token:', this.authToken ? 'Present' : 'Missing');
-            if (this.authToken) {
-                console.log('Token preview:', this.authToken.substring(0, 20) + '...');
-            }
-            console.log('Config:', config);
-            console.log('Config.data:', JSON.stringify(config.data, null, 2));
-            
             try {
                 const response = await axios(config);
-                console.log(`API Response:`, response.data);
                 return response;
             } catch (error) {
                 console.error('API Error:', error);
@@ -1087,7 +1061,6 @@ createApp({
                 
                 // If we get 401, the token might be invalid
                 if (error.response?.status === 401) {
-                    console.log('Token might be invalid, clearing auth');
                     this.clearAuth();
                 }
                 
@@ -1114,6 +1087,33 @@ createApp({
                 month: 'short',
                 day: 'numeric'
             });
+        },
+        
+        formatDateWithTime(dateString) {
+            const date = new Date(dateString);
+            const dateStr = date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+            const timeStr = date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            return `${dateStr} (${timeStr})`;
+        },
+        
+        formatTransactionDisplay(keyString) {
+            // Format: "TransactionName - 2025-10-04T18:51:00Z"
+            // Split by " - " to separate name and date
+            const parts = keyString.split(' - ');
+            if (parts.length >= 2) {
+                const name = parts[0];
+                const dateStr = parts.slice(1).join(' - '); // In case name contains " - "
+                const formattedDate = this.formatDateWithTime(dateStr);
+                return `${name} - ${formattedDate}`;
+            }
+            return keyString;
         },
         
         getTransactionIcon(type) {
@@ -1169,23 +1169,31 @@ createApp({
         },
         
         toggleAdminPanel() {
-            console.log('Admin button clicked!');
             this.currentView = this.currentView === 'admin' ? 'wallets' : 'admin';
         },
         
         toggleProfilePanel() {
             if (!this.isAuthenticated || !this.currentUser) {
-                console.log('User not authenticated or no current user');
                 return;
             }
             
             // Populate form with current user data
+            // Convert birthDate from ISO format to YYYY-MM-DD for date input
+            let birthDate = '';
+            if (this.currentUser.birthDate) {
+                try {
+                    birthDate = new Date(this.currentUser.birthDate).toISOString().split('T')[0];
+                } catch (error) {
+                    console.error('Error converting birthDate:', error);
+                }
+            }
+            
             this.profileForm = {
                 firstName: this.currentUser.firstName || '',
                 lastName: this.currentUser.lastName || '',
                 userName: this.currentUser.userName || '',
                 email: this.currentUser.email || '',
-                birthDate: this.currentUser.birthDate || ''
+                birthDate: birthDate
             };
             
             this.showProfilePanel = !this.showProfilePanel;
@@ -1194,7 +1202,13 @@ createApp({
         async updateProfile() {
             this.profileLoading = true;
             try {
-                const response = await this.apiCall(`/users/${this.currentUser.id}/update`, 'PUT', this.profileForm);
+                // Convert birthDate to ISO string (Instant format) if it exists
+                const profileData = {
+                    ...this.profileForm,
+                    birthDate: this.profileForm.birthDate ? new Date(this.profileForm.birthDate).toISOString() : this.profileForm.birthDate
+                };
+                
+                const response = await this.apiCall(`/users/${this.currentUser.id}/update`, 'PUT', profileData);
                 
                 // Update current user data
                 this.currentUser = { ...this.currentUser, ...response.data };
@@ -1244,9 +1258,7 @@ createApp({
                     amount: this.transferForm.amount
                 };
                 
-                console.log('Transferring funds:', transferData);
                 const response = await this.apiCall('/transactions/transfer', 'POST', transferData);
-                console.log('Transfer successful:', response.data);
                 
                 // Close transfer modal
                 this.showTransferModal = false;
@@ -1368,7 +1380,6 @@ createApp({
                 return false;
             }
             const role = this.currentUser.role.toString().trim().toUpperCase();
-            console.log('Checking admin role:', role);
             return role === 'ADMIN';
         }
     }
