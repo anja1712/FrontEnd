@@ -218,7 +218,7 @@
                                     <div class="transaction-info">
                                         <strong>{{ transaction.name }}</strong>
                                         <span>Category: {{ transaction.category || 'N/A' }}</span>
-                                        <span>Type: {{ transaction.transactionType }}</span>
+                                        <span>Type: {{ transaction.type || 'N/A' }}</span>
                                     </div>
                                     <div class="transaction-details">
                                         <span class="amount">{{ transaction.amount }} {{ transaction.currency }}</span>
@@ -320,12 +320,13 @@
                                 <div v-for="transaction in monitoredTransactions" :key="transaction.id" class="transaction-item">
                                     <div class="transaction-info">
                                         <strong>{{ transaction.name }}</strong>
-                                        <span>User ID: {{ transaction.user?.id || 'N/A' }}</span>
+                                        <span>User ID: {{ transaction.userId || 'N/A' }}</span>
                                         <span>Category: {{ transaction.category || 'N/A' }}</span>
+                                        <span>Type: {{ transaction.type || 'N/A' }}</span>
                                     </div>
                                     <div class="transaction-details">
                                         <span class="amount">{{ transaction.amount }} {{ transaction.currency }}</span>
-                                        <small>{{ formatDate(transaction.transactionDate) }}</small>
+                                        <small>{{ formatDate(transaction.date) }}</small>
                                     </div>
                                 </div>
                             </div>
@@ -421,11 +422,11 @@
                                         <i :class="getTransactionIcon(transaction.type)"></i>
                                     </div>
                                     <div class="transaction-details">
-                                        <h4>{{ transaction.name }}</h4>
+                                        <h4>{{ transaction.name }}{{ transaction.walletName ? ' - ' + transaction.walletName : '' }}</h4>
                                         <p>{{ formatDate(transaction.date) }}</p>
                                     </div>
                                     <div class="transaction-amount" :class="transaction.type.toLowerCase()">
-                                        {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, getWalletCurrency(transaction.walletId)) }}
+                                        {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, transaction.currency) }}
                                     </div>
                                 </div>
                             </div>
@@ -493,10 +494,16 @@
                             </span>
                         </div>
                         <div class="wallet-actions">
-                            <button @click="openCreateTransaction" class="btn-primary btn-narrow">
+                            <button 
+                                @click="openCreateTransaction" 
+                                :disabled="selectedWallet?.archived"
+                                :class="['btn-primary', 'btn-narrow', { 'btn-disabled': selectedWallet?.archived }]">
                                 <i class="fas fa-plus"></i> Add Transaction
                             </button>
-                            <button @click="openTransferModal" class="btn-secondary btn-narrow">
+                            <button 
+                                @click="openTransferModal"
+                                :disabled="selectedWallet?.archived" 
+                                :class="['btn-secondary', 'btn-narrow', { 'btn-disabled': selectedWallet?.archived }]">
                                 <i class="fas fa-exchange-alt"></i> Transfer
                             </button>
                         </div>
@@ -511,7 +518,7 @@
                                 <p>{{ formatDate(transaction.date) }}</p>
                             </div>
                             <div class="transaction-amount" :class="transaction.type.toLowerCase()">
-                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, selectedWallet?.currency) }}
+                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, transaction.currency) }}
                             </div>
                         </div>
                         <div v-if="walletTransactions.length === 0" class="no-transactions">
@@ -608,7 +615,7 @@
                             </div>
                             <div class="transaction-details">
                                 <h4>
-                                    {{ transaction.name }}
+                                    {{ transaction.name }}{{ transaction.walletName ? ' - ' + transaction.walletName : '' }}
                                     <span v-if="transaction.recurring" class="recurring-badge">
                                         <i class="fas fa-sync-alt"></i> {{ transaction.frequency || 'Recurring' }}
                                     </span>
@@ -616,7 +623,7 @@
                                 <p>{{ formatDate(transaction.transactionDate) }}</p>
                             </div>
                             <div class="transaction-amount" :class="transaction.type.toLowerCase()">
-                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, getWalletCurrency(transaction.walletId)) }}
+                                {{ transaction.type === 'INCOME' ? '+' : '-' }}{{ formatCurrency(transaction.amount, transaction.currency) }}
                             </div>
                             <button v-if="transaction.recurring" 
                                     @click.stop="disableRecurring(transaction.id)" 
@@ -772,14 +779,30 @@
                     <div class="form-group">
                         <label>Wallet</label>
                         <select v-model="newTransaction.walletId" required>
-                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id">
+                            <option v-for="wallet in activeWallets" :key="wallet.id" :value="wallet.id">
                                 {{ wallet.name }} ({{ wallet.currency }})
                             </option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Category</label>
-                        <input type="text" v-model="newTransaction.category" required>
+                        <input 
+                            type="text" 
+                            v-model="newTransaction.category" 
+                            list="category-suggestions" 
+                            placeholder="Select category"
+                            class="category-input"
+                            autocomplete="off"
+                            required>
+                        <datalist id="category-suggestions">
+                            <option v-for="category in filteredCategories" :key="category.name" :value="category.name">
+                        </datalist>
+                        <small class="form-help">Choose from existing categories or type a new one</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Transaction Date</label>
+                        <input type="datetime-local" v-model="newTransaction.transactionDate" required>
+                        <small class="form-help">Set the date and time for this transaction</small>
                     </div>
                     <div class="form-group">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -827,7 +850,7 @@
                     <div class="form-group">
                         <label>From Wallet</label>
                         <select v-model="transferForm.sourceWalletId" required>
-                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id">
+                            <option v-for="wallet in activeWallets" :key="wallet.id" :value="wallet.id">
                                 {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
                             </option>
                         </select>
@@ -835,7 +858,7 @@
                     <div class="form-group">
                         <label>To Wallet</label>
                         <select v-model="transferForm.destinationWalletId" required>
-                            <option v-for="wallet in wallets" :key="wallet.id" :value="wallet.id" :disabled="wallet.id === transferForm.sourceWalletId">
+                            <option v-for="wallet in activeWallets" :key="wallet.id" :value="wallet.id" :disabled="wallet.id === transferForm.sourceWalletId">
                                 {{ wallet.name }} ({{ formatCurrency(wallet.balance || 0, wallet.currency) }})
                             </option>
                         </select>

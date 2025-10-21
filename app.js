@@ -114,7 +114,8 @@ createApp({
                 currency: 'USD',
                 recurring: false,
                 frequency: null,
-                goal: null
+                goal: null,
+                transactionDate: new Date().toISOString().slice(0, 16)
             },
             newGoal: {
                 name: '',
@@ -173,6 +174,13 @@ createApp({
         currentView(newView) {
             // Save current view to localStorage for persistence on refresh
             localStorage.setItem('currentView', newView);
+        },
+        
+        'newTransaction.type'(newType, oldType) {
+            // Reset category when transaction type changes
+            if (newType !== oldType) {
+                this.newTransaction.category = '';
+            }
         }
     },
     
@@ -190,6 +198,10 @@ createApp({
         
         savingsWallets() {
             return this.wallets.filter(wallet => wallet.savings && !wallet.archived);
+        },
+        
+        activeWallets() {
+            return this.wallets.filter(wallet => !wallet.archived);
         },
         
         filteredWallets() {
@@ -212,6 +224,13 @@ createApp({
                 return transactions.filter(t => t.recurring === true);
             }
             return transactions; // Show all by default
+        },
+        
+        filteredCategories() {
+            // Filter categories based on transaction type (INCOME or EXPENSE)
+            return this.categories.filter(category => 
+                category.transactionType === this.newTransaction.type
+            );
         }
     },
     
@@ -431,7 +450,7 @@ createApp({
         
         async loadCategories() {
             try {
-                const response = await this.apiCall('/users/categories?onlyMy=true', 'GET');
+                const response = await this.apiCall('/users/categories?onlyMy=false', 'GET');
                 this.categories = response.data || [];
             } catch (error) {
                 console.error('Error loading categories:', error);
@@ -594,25 +613,28 @@ createApp({
             this.confirmModalAction = null;
         },
         
-        async selectWallet(wallet) {
-            this.selectedWallet = wallet;
-            console.log('Selected wallet:', wallet);
-            
+        async loadWalletTransactions(walletId) {
             try {
-                // Load transactions for this wallet
-                const response = await this.apiCall(`/wallets/${wallet.id}/transactions`, 'GET');
+                const response = await this.apiCall(`/wallets/${walletId}/transactions`, 'GET');
                 // Sort by date (newest first)
                 this.walletTransactions = (response.data || []).sort((a, b) => 
                     new Date(b.date || b.transactionDate) - new Date(a.date || a.transactionDate)
                 );
                 console.log('Wallet transactions loaded:', this.walletTransactions);
-                
-                // Show wallet transactions view
-                this.currentView = 'wallet-detail';
             } catch (error) {
                 console.error('Error loading wallet transactions:', error);
                 alert('Failed to load wallet transactions');
             }
+        },
+        
+        async selectWallet(wallet) {
+            this.selectedWallet = wallet;
+            console.log('Selected wallet:', wallet);
+            
+            await this.loadWalletTransactions(wallet.id);
+            
+            // Show wallet transactions view
+            this.currentView = 'wallet-detail';
         },
         
         // Transaction Methods (moved to line ~1081 with proper currency handling)
@@ -905,6 +927,12 @@ createApp({
             console.log('Monitor button clicked');
             console.log('Monitoring request data:', this.monitoringRequest);
             
+            // Validate that only one sorting method is selected
+            if (this.monitoringRequest.sortByDate && this.monitoringRequest.sortByAmount) {
+                this.showErrorMessage('Please select only one sorting method (Date OR Amount, not both)');
+                return;
+            }
+            
             // Build the request with only non-null/non-empty values
             const request = {};
             
@@ -1109,16 +1137,6 @@ createApp({
             };
         },
         
-        resetNewTransaction() {
-            this.newTransaction = {
-                name: '',
-                amount: 0,
-                type: 'EXPENSE',
-                walletId: null,
-                category: ''
-            };
-        },
-        
         resetNewGoal() {
             this.newGoal = {
                 name: '',
@@ -1139,7 +1157,8 @@ createApp({
                 currency: 'USD',
                 recurring: false,
                 frequency: null,
-                goal: null
+                goal: null,
+                transactionDate: new Date().toISOString().slice(0, 16)
             };
         },
         
@@ -1270,7 +1289,7 @@ createApp({
                     amount: parseFloat(this.newTransaction.amount),
                     category: this.newTransaction.category,
                     type: this.newTransaction.type,
-                    transactionDate: new Date().toISOString(),
+                    transactionDate: new Date(this.newTransaction.transactionDate).toISOString(),
                     walletId: this.newTransaction.walletId,
                     recurring: this.newTransaction.recurring,
                     frequency: this.newTransaction.recurring ? this.newTransaction.frequency : null,
@@ -1287,18 +1306,24 @@ createApp({
                 this.showSuccessMessage('Transaction created successfully!');
                 
                 // Reload data in background (don't await to avoid blocking UI)
-                setTimeout(() => {
-                    Promise.all([
-                        this.loadWallets(),
-                        this.loadTransactions(),
-                        this.loadLastTransactions(),
-                        this.loadGoals()
-                    ]).catch(err => console.error('Error reloading data:', err));
-                    
-                    if (this.selectedWallet) {
-                        this.loadWalletTransactions(this.selectedWallet.id).catch(err => 
-                            console.error('Error reloading wallet transactions:', err)
-                        );
+                setTimeout(async () => {
+                    try {
+                        await Promise.all([
+                            this.loadWallets(),
+                            this.loadTransactions(),
+                            this.loadLastTransactions(),
+                            this.loadGoals(),
+                            this.loadCategories() // Reload categories to get the new custom category
+                        ]);
+                        
+                        // If we're in wallet detail view, reload wallet transactions and update selectedWallet
+                        if (this.selectedWallet) {
+                            // Update selectedWallet reference with fresh data
+                            this.selectedWallet = this.wallets.find(w => w.id === this.selectedWallet.id);
+                            await this.loadWalletTransactions(this.selectedWallet.id);
+                        }
+                    } catch (err) {
+                        console.error('Error reloading data:', err);
                     }
                 }, 100);
             } catch (error) {
@@ -1309,14 +1334,28 @@ createApp({
         },
         
         openCreateTransaction() {
+            // Don't open modal for archived wallets
+            if (this.selectedWallet?.archived) {
+                this.showErrorMessage('Cannot add transactions to archived wallets');
+                return;
+            }
+            
             // Pre-select the current wallet if we're in wallet detail view
             if (this.selectedWallet) {
                 this.newTransaction.walletId = this.selectedWallet.id;
             }
+            // Set default date to now
+            this.newTransaction.transactionDate = new Date().toISOString().slice(0, 16);
             this.showCreateTransaction = true;
         },
         
         openTransferModal() {
+            // Don't open modal for archived wallets
+            if (this.selectedWallet?.archived) {
+                this.showErrorMessage('Cannot transfer from archived wallets');
+                return;
+            }
+            
             // Pre-select the source wallet if we're in wallet detail view
             if (this.selectedWallet) {
                 this.transferForm.sourceWalletId = this.selectedWallet.id;

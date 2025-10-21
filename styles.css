@@ -202,6 +202,23 @@ body {
     border-color: #4caf50;
 }
 
+/* Disabled Button Styles */
+.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+.btn-primary.btn-disabled {
+    background: #9e9e9e;
+}
+
+.btn-secondary.btn-disabled {
+    background: #f5f5f5;
+    border-color: #e0e0e0;
+    color: #9e9e9e;
+}
+
 /* Confirmation Modal */
 .confirm-modal {
     background: white;
@@ -1692,6 +1709,40 @@ body {
     outline: none;
     border-color: #4caf50;
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+/* Category Input with Datalist */
+.modal-form .category-input {
+    background: white;
+    width: 100%;
+}
+
+.modal-form .category-input:focus {
+    background: white;
+    border-color: #4caf50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+/* Style the datalist dropdown options - browser support is limited */
+datalist {
+    display: none;
+}
+
+datalist option {
+    background-color: white;
+    color: #333;
+    padding: 10px;
+    font-size: 16px;
+}
+
+/* Webkit browsers (Chrome, Safari) - partial support for datalist styling */
+input[list]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+input[list]::-webkit-list-button {
+    color: #4caf50;
 }
 
 .modal-actions {
